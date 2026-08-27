@@ -1,6 +1,32 @@
 // Minimal Pi Network payment flow for the "Process a Transaction" checklist step.
 // Runs only inside Pi Browser, where window.Pi is injected by the SDK script in index.html.
 
+export function runPiAuth(onSuccess, onStatus) {
+  if (typeof window === "undefined" || !window.Pi) {
+    onStatus("لازم تفتح التطبيق من داخل Pi Browser عشان تسجّل الدخول.");
+    return;
+  }
+
+  try {
+    window.Pi.init({ version: "2.0", sandbox: true });
+  } catch (e) {
+    onStatus("فشل تهيئة Pi SDK: " + e.message);
+    return;
+  }
+
+  const scopes = ["username", "payments"];
+
+  window.Pi.authenticate(scopes, (payment) => {
+    console.log("Incomplete payment found during auth:", payment);
+  })
+    .then((auth) => {
+      onSuccess(auth.user);
+    })
+    .catch((err) => {
+      onStatus("فشل تسجيل الدخول: " + (err?.message || err));
+    });
+}
+
 export function runTestPiPayment(onStatus) {
   if (typeof window === "undefined" || !window.Pi) {
     onStatus("لازم تفتح التطبيق من داخل Pi Browser عشان يشتغل الدفع.");
