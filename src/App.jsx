@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { runTestPiPayment } from "./piPayment.js";
+import { runTestPiPayment, runPiAuth } from "./piPayment.js";
 import {
   Search, Heart, MapPin, ChevronLeft, ChevronRight, ChevronDown, Plus, Home as HomeIcon,
   Grid3x3, MessageCircle, User, Smartphone, Sofa, Shirt, Car, Building2,
@@ -888,7 +888,7 @@ const COPY = {
     offerIntlShipping: "إتاحة الشحن الدولي", offerIntlShippingHint: "يسمح للمشترين من دول الجوار (مصر، تونس...) باختيار شركة شحن لإيصال المنتج إليهم",
     settingsAppSection: "التطبيق", settingsDataSection: "البيانات", settingsAboutSection: "حول التطبيق",
     languageLabel: "اللغة", notificationsLabel: "الإشعارات", notificationsHint: "تنبيهات لعروض الأسعار والرسائل والبحث المحفوظ",
-    piEquivalentLabel: "إظهار السعر التقريبي بعملة Pi", piEquivalentHint: "يظهر بجانب سعر الإعلان بالدينار الليبي",
+    piEquivalentLabel: "إظهار السعر بالدينار الليبي أيضاً", piEquivalentHint: "يظهر كسعر ثانوي تحت سعر الإعلان الأساسي بعملة Pi",
     resetDataLabel: "مسح جميع بياناتي المحلية", resetDataHint: "يمسح المفضلة، إعلاناتك، وعمليات البحث المحفوظة من هذا الجهاز",
     resetDataConfirm: "هل أنت متأكد؟ لا يمكن التراجع عن هذا الإجراء.", resetDataConfirmYes: "نعم، امسح البيانات", cancel: "إلغاء",
     resetDataDone: "تم مسح البيانات بنجاح", appVersion: "إصدار التطبيق", privacyPolicy: "سياسة الخصوصية", termsOfService: "الشروط والأحكام",
@@ -936,7 +936,7 @@ const COPY = {
     offerIntlShipping: "Offer international shipping", offerIntlShippingHint: "Lets buyers from neighboring countries (Egypt, Tunisia...) pick a carrier to receive this item",
     settingsAppSection: "App", settingsDataSection: "Data", settingsAboutSection: "About",
     languageLabel: "Language", notificationsLabel: "Notifications", notificationsHint: "Alerts for offers, messages, and saved searches",
-    piEquivalentLabel: "Show approximate price in Pi", piEquivalentHint: "Shown next to the LYD price on listings",
+    piEquivalentLabel: "Also show price in LYD", piEquivalentHint: "Shown as a secondary price under the main Pi price",
     resetDataLabel: "Clear all my local data", resetDataHint: "Clears favorites, your listings, and saved searches from this device",
     resetDataConfirm: "Are you sure? This cannot be undone.", resetDataConfirmYes: "Yes, clear my data", cancel: "Cancel",
     resetDataDone: "Your data was cleared", appVersion: "App version", privacyPolicy: "Privacy Policy", termsOfService: "Terms of Service",
@@ -972,10 +972,21 @@ function TilePattern({ opacity = 0.06, color = CREAM }) {
   );
 }
 
-function PriceTag({ value, ld, dir }) {
+function PriceTag({ value, ld, dir, showLYD, compact }) {
+  const piValue = value / PI_RATE;
+  const piFormatted = piValue.toLocaleString(dir === "rtl" ? "ar-LY" : "en-US", {
+    maximumFractionDigits: piValue < 10 ? 2 : 0,
+  });
   return (
-    <span className="font-bold" style={{ color: GOLD }}>
-      {value.toLocaleString(dir === "rtl" ? "ar-LY" : "en-US")} <span className="text-xs font-medium opacity-80">{ld}</span>
+    <span className={compact ? "" : "flex flex-col"}>
+      <span className="font-bold" style={{ color: GOLD }}>
+        {piFormatted} <span className="text-xs font-medium opacity-80">π</span>
+      </span>
+      {showLYD && (
+        <span className="text-[10px] opacity-50 block mt-0.5">
+          {value.toLocaleString(dir === "rtl" ? "ar-LY" : "en-US")} {ld}
+        </span>
+      )}
     </span>
   );
 }
@@ -1080,11 +1091,13 @@ export default function App() {
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [userListings, setUserListings] = useState([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showPiEquivalent, setShowPiEquivalent] = useState(false);
+  const [showLYD, setShowLYD] = useState(false);
   const [sellInternational, setSellInternational] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const [piPaymentStatus, setPiPaymentStatus] = useState("");
+  const [piUser, setPiUser] = useState(null);
+  const [piAuthStatus, setPiAuthStatus] = useState("");
   const [showOffer, setShowOffer] = useState(false);
   const [offerAmount, setOfferAmount] = useState("");
   const [offerSent, setOfferSent] = useState(false);
@@ -1292,6 +1305,37 @@ export default function App() {
   const navProfileActive = ["profile", "favorites", "myListings", "settings"].includes(view);
   const searching = searchQuery.trim().length > 0;
 
+  if (!piUser) {
+    return (
+      <div dir={dir} className="w-full min-h-screen flex items-center justify-center px-6" style={{ background: BLACK, color: CREAM, fontFamily: lang === "ar" ? "'Tajawal', sans-serif" : "'Inter', sans-serif" }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=Tajawal:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+          .display-font { font-family: ${lang === "ar" ? "'Cairo', sans-serif" : "'Space Grotesk', sans-serif"}; }
+          .press:active { transform: scale(0.98); }
+        `}</style>
+        <div className="w-full max-w-sm text-center">
+          <div className="flex justify-center mb-6">
+            <Logo lang={lang} size="lg" />
+          </div>
+          <p className="text-sm opacity-70 mb-8">
+            {lang === "ar" ? "سجّل الدخول بحساب Pi للمتابعة إلى السوق الليبي" : "Sign in with your Pi account to continue to LibyanSouq"}
+          </p>
+          <button
+            onClick={() => { setPiAuthStatus(""); runPiAuth((user) => setPiUser(user), setPiAuthStatus); }}
+            className="press w-full py-3.5 rounded-2xl font-bold text-sm transition-transform"
+            style={{ background: `linear-gradient(120deg, ${GOLD_LIGHT}, ${GOLD})`, color: BLACK }}
+          >
+            {lang === "ar" ? "تسجيل الدخول بـ Pi" : "Sign in with Pi"}
+          </button>
+          {piAuthStatus && <p className="text-xs mt-4 opacity-60">{piAuthStatus}</p>}
+          <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="press mt-6 text-xs font-semibold opacity-50 transition-transform">
+            {lang === "ar" ? "English" : "العربية"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div dir={dir} className="w-full min-h-screen flex justify-center" style={{ background: "#0A0A0A", fontFamily: lang === "ar" ? "'Tajawal', sans-serif" : "'Inter', sans-serif" }}>
       <style>{`
@@ -1347,7 +1391,7 @@ export default function App() {
                 <h2 className="display-font font-bold text-lg mb-4">{t.searchResultsFor} "{searchQuery}" ({baseFiltered.length})</h2>
                 <div className="grid grid-cols-2 gap-3">
                   {baseFiltered.map((p) => (
-                    <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} />
+                    <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} showLYD={showLYD} />
                   ))}
                   {baseFiltered.length === 0 && <p className="col-span-2 text-sm opacity-60 text-center py-10">{t.noResults}</p>}
                 </div>
@@ -1383,7 +1427,7 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     {baseFiltered.slice(0, 8).map((p) => (
-                      <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} />
+                      <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} showLYD={showLYD} />
                     ))}
                     {baseFiltered.length === 0 && <p className="col-span-2 text-sm opacity-60 text-center py-10">{t.noResults}</p>}
                   </div>
@@ -1455,7 +1499,7 @@ export default function App() {
             />
             <div className="grid grid-cols-2 gap-3">
               {(view === "allProducts" ? baseFiltered : visibleProducts).map((p) => (
-                <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} />
+                <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} showLYD={showLYD} />
               ))}
               {(view === "allProducts" ? baseFiltered : visibleProducts).length === 0 && (
                 <p className="col-span-2 text-sm opacity-60 text-center py-10">{t.noResults}</p>
@@ -1471,7 +1515,7 @@ export default function App() {
             <h2 className="display-font font-bold text-xl mb-4">{t.favorites}</h2>
             <div className="grid grid-cols-2 gap-3">
               {allProducts.filter((p) => favorites.has(p.id)).map((p) => (
-                <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} />
+                <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} showLYD={showLYD} />
               ))}
               {favorites.size === 0 && <p className="col-span-2 text-sm opacity-60 text-center py-10">{t.noFavorites}</p>}
             </div>
@@ -1485,7 +1529,7 @@ export default function App() {
             <h2 className="display-font font-bold text-xl mb-4">{t.myListings} ({userListings.length})</h2>
             <div className="grid grid-cols-2 gap-3">
               {userListings.map((p) => (
-                <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} />
+                <ProductCard key={p.id} p={p} lang={lang} t={t} dir={dir} cityLabel={cityOf(p)} isFav={favorites.has(p.id)} onFav={() => toggleFav(p.id)} onOpen={() => openProduct(p)} isComparing={compareIds.includes(p.id)} onCompare={() => toggleCompare(p.id)} showLYD={showLYD} />
               ))}
               {userListings.length === 0 && (
                 <div className="col-span-2 flex flex-col items-center text-center py-14 gap-3">
@@ -1519,10 +1563,7 @@ export default function App() {
                   </span>
                 )}
               </div>
-              <div className="text-2xl mb-1"><PriceTag value={activeProduct.price} ld={t.ld} dir={dir} /></div>
-              {showPiEquivalent && (
-                <div className="text-xs opacity-50 mb-2">≈ {(activeProduct.price / PI_RATE).toFixed(1)} π ({t.approx})</div>
-              )}
+              <div className="text-2xl mb-3"><PriceTag value={activeProduct.price} ld={t.ld} dir={dir} showLYD={showLYD} /></div>
               <div className="flex items-center gap-1.5 text-xs opacity-70 mb-4">
                 <MapPin size={13} /> {cityOf(activeProduct)}, {countryOf(activeProduct)} · {t.posted}
               </div>
@@ -1629,7 +1670,7 @@ export default function App() {
               };
               const condLabel = (p) => p.condition ? nameOf(COND_OPTS.find((c) => c.id === p.condition) || { ar: p.condition, en: p.condition }) : "—";
               const rows = [
-                { label: lang === "ar" ? "السعر" : "Price", get: (p) => `${p.price.toLocaleString()} ${t.ld}` },
+                { label: lang === "ar" ? "السعر" : "Price", get: (p) => `${(p.price / PI_RATE).toLocaleString(undefined, { maximumFractionDigits: p.price / PI_RATE < 10 ? 2 : 0 })} π` },
                 { label: lang === "ar" ? "المدينة" : "City", get: (p) => cityOf(p) },
                 { label: lang === "ar" ? "الماركة" : "Brand", get: (p) => brandLabel(p) },
                 { label: lang === "ar" ? "الموديل" : "Model", get: (p) => p.model || "—" },
@@ -1912,8 +1953,8 @@ export default function App() {
                     <div className="text-[10px] opacity-50">{t.piEquivalentHint}</div>
                   </div>
                 </div>
-                <button onClick={() => setShowPiEquivalent((v) => !v)} className="press w-10 h-6 rounded-full relative shrink-0 transition-transform" style={{ background: showPiEquivalent ? GOLD : "rgba(243,239,230,0.15)" }}>
-                  <span className="absolute top-0.5 w-5 h-5 rounded-full transition-all" style={{ background: BLACK, [dir === "rtl" ? "right" : "left"]: showPiEquivalent ? "2px" : "18px" }} />
+                <button onClick={() => setShowLYD((v) => !v)} className="press w-10 h-6 rounded-full relative shrink-0 transition-transform" style={{ background: showLYD ? GOLD : "rgba(243,239,230,0.15)" }}>
+                  <span className="absolute top-0.5 w-5 h-5 rounded-full transition-all" style={{ background: BLACK, [dir === "rtl" ? "right" : "left"]: showLYD ? "2px" : "18px" }} />
                 </button>
               </div>
             </div>
@@ -2141,7 +2182,7 @@ function SpecChip({ label }) {
   );
 }
 
-function ProductCard({ p, lang, t, dir, cityLabel, isFav, onFav, onOpen, isComparing, onCompare }) {
+function ProductCard({ p, lang, t, dir, cityLabel, isFav, onFav, onOpen, isComparing, onCompare, showLYD }) {
   const title = lang === "ar" ? p.ar : p.en;
   const isImported = p.country_ar !== "ليبيا";
   return (
@@ -2167,7 +2208,7 @@ function ProductCard({ p, lang, t, dir, cityLabel, isFav, onFav, onOpen, isCompa
         </div>
         <div className="p-2.5">
           <p className="text-[12.5px] font-medium leading-snug mb-1.5 line-clamp-2" style={{ minHeight: "2.4em" }}>{title}</p>
-          <PriceTag value={p.price} ld={t.ld} dir={dir} />
+          <PriceTag value={p.price} ld={t.ld} dir={dir} showLYD={showLYD} />
           <div className="flex items-center justify-between mt-1">
             <div className="flex items-center gap-1 text-[10px] opacity-55">
               <MapPin size={10} /> {cityLabel}
